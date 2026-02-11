@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gravity Runner - ConceptCade</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; color: #fff; font-family: 'Courier New', monospace; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 20px; text-shadow: 0 0 5px #0f0; }
+        #gameover { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
+        h1 { color: #0f0; text-shadow: 0 0 10px #0f0; margin-bottom: 10px; }
+        p { color: #fff; margin-bottom: 20px; }
+        button { background: #0f0; color: #000; border: none; padding: 10px 20px; font-size: 18px; cursor: pointer; font-family: inherit; font-weight: bold; }
+        button:hover { background: #fff; box-shadow: 0 0 10px #0f0; }
+    </style>
+</head>
+<body>
+    <div id="ui">SCORE: <span id="score">0</span></div>
+    <div id="gameover">
+        <h1>GAME OVER</h1>
+        <p>Concept: Inverting the force vector.</p>
+        <p>Final Score: <span id="finalScore">0</span></p>
+        <button onclick="resetGame()">TRY AGAIN</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const finalScoreEl = document.getElementById('finalScore');
+        const gameoverEl = document.getElementById('gameover');
+
+        let width, height;
+        let gameRunning = true;
+        let score = 0;
+        let frame = 0;
+        let speed = 5;
+
+        // Player
+        const player = {
+            x: 50,
+            y: 0,
+            width: 30,
+            height: 30,
+            color: '#0f0', // Neon Green
+            gravityDir: 1, // 1 = down, -1 = up
+            vy: 0,
+            grounded: false
+        };
+
+        const obstacles = [];
+        const particles = [];
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            if (player.y === 0) player.y = height / 2; // Initial position
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Input
+        window.addEventListener('keydown', e => {
+            if (e.code === 'Space' && gameRunning) {
+                player.gravityDir *= -1;
+                // Add jump effect particles
+                createParticles(player.x + player.width/2, player.y + player.height/2, 10, '#0ff');
+            }
+            if (e.code === 'Space' && !gameRunning) {
+               // Optional: restart on space if game over, but button exists
+            }
+        });
+
+        // Game Loop
+        function update() {
+            if (!gameRunning) return;
+
+            // Physics
+            const gravityForce = 0.8 * player.gravityDir;
+            player.vy += gravityForce;
+            player.y += player.vy;
+
+            // Floor/Ceiling Collision
+            if (player.y + player.height > height) {
+                player.y = height - player.height;
+                player.vy = 0;
+                player.grounded = true;
+            } else if (player.y < 0) {
+                player.y = 0;
+                player.vy = 0;
+                player.grounded = true;
+            } else {
+                player.grounded = false;
+            }
+
+            // Obstacles
+            if (frame % 100 === 0) {
+                const isCeiling = Math.random() > 0.5;
+                const obsHeight = 40 + Math.random() * 60;
+                obstacles.push({
+                    x: width,
+                    y: isCeiling ? 0 : height - obsHeight,
+                    width: 30,
+                    height: obsHeight,
+                    color: '#f00' // Neon Red
+                });
+            }
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                obs.x -= speed;
+
+                // Collision Detection
+                if (
+                    player.x < obs.x + obs.width &&
+                    player.x + player.width > obs.x &&
+                    player.y < obs.y + obs.height &&
+                    player.y + player.height > obs.y
+                ) {
+                    gameOver();
+                }
+
+                if (obs.x + obs.width < 0) {
+                    obstacles.splice(i, 1);
+                    score += 10;
+                    scoreEl.innerText = score;
+                    speed += 0.1;
+                }
+            }
+
+            // Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            frame++;
+        }
+
+        function draw() {
+            // Trail effect
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(0, 0, width, height);
+
+            // Player
+            ctx.fillStyle = player.color;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            // Obstacles
+            ctx.fillStyle = '#f00';
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#f00';
+            obstacles.forEach(obs => {
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+            });
+
+            // Particles
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+            });
+
+            ctx.shadowBlur = 0;
+            
+            if (gameRunning) requestAnimationFrame(loop);
+        }
+
+        function loop() {
+            update();
+            draw();
+        }
+
+        function createParticles(x, y, count, color) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 5,
+                    vy: (Math.random() - 0.5) * 5,
+                    life: 20,
+                    color: color,
+                    size: 3
+                });
+            }
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            gameoverEl.style.display = 'block';
+            finalScoreEl.innerText = score;
+        }
+
+        function resetGame() {
+            obstacles.length = 0;
+            particles.length = 0;
+            score = 0;
+            speed = 5;
+            frame = 0;
+            player.y = height / 2;
+            player.vy = 0;
+            player.gravityDir = 1;
+            scoreEl.innerText = '0';
+            gameoverEl.style.display = 'none';
+            gameRunning = true;
+            loop();
+        }
+
+        // Start
+        loop();
+    </script>
+</body>
+</html>
